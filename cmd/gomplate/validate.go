@@ -5,13 +5,17 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
+
+func isSet(cmd *cobra.Command, flag string) bool {
+	return cmd.Flags().Changed(flag) || viper.InConfig(flag)
+}
 
 func notTogether(cmd *cobra.Command, flags ...string) error {
 	found := ""
 	for _, flag := range flags {
-		f := cmd.Flag(flag)
-		if f != nil && f.Changed {
+		if isSet(cmd, flag) {
 			if found != "" {
 				a := make([]string, len(flags))
 				for i := range a {
@@ -26,10 +30,8 @@ func notTogether(cmd *cobra.Command, flags ...string) error {
 }
 
 func mustTogether(cmd *cobra.Command, left, right string) error {
-	l := cmd.Flag(left)
-	if l != nil && l.Changed {
-		r := cmd.Flag(right)
-		if r != nil && !r.Changed {
+	if isSet(cmd, left) {
+		if !isSet(cmd, right) {
 			return fmt.Errorf("--%s must be set when --%s is set", right, left)
 		}
 	}
@@ -43,11 +45,13 @@ func validateOpts(cmd *cobra.Command, args []string) (err error) {
 		err = notTogether(cmd, "out", "output-dir", "output-map", "exec-pipe")
 	}
 
-	if err == nil && len(opts.InputFiles) != len(opts.OutputFiles) {
-		err = fmt.Errorf("must provide same number of --out (%d) as --file (%d) options", len(opts.OutputFiles), len(opts.InputFiles))
+	f := viper.GetStringSlice("file")
+	o := viper.GetStringSlice("out")
+	if err == nil && len(f) != len(o) {
+		err = fmt.Errorf("must provide same number of --out (%d) as --file (%d) options", len(o), len(f))
 	}
 
-	if err == nil && cmd.Flag("exec-pipe").Changed && len(args) == 0 {
+	if err == nil && isSet(cmd, "exec-pipe") && len(args) == 0 {
 		err = fmt.Errorf("--exec-pipe may only be used with a post-exec command after --")
 	}
 
